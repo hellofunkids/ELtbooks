@@ -18,7 +18,7 @@ Railway, Fly.io 등도 아래 명령을 그대로 쓰면 됩니다.
 
 | 단계 | 명령 |
 |---|---|
-| 설치 | `corepack enable && pnpm install --frozen-lockfile` |
+| 설치 | `npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile --prod=false` |
 | 빌드 | `pnpm run build:node` |
 | DB 스키마 | `pnpm run db:push` (테이블이 없을 때 생성. 기존 데이터는 지우지 않음) |
 | 시작 | `pnpm run start:node` (`PORT`는 호스팅이 지정) |

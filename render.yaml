@@ -9,7 +9,7 @@ services:
     runtime: node
     region: singapore
     plan: free               # 15분 무접속 시 잠듦, 다음 접속 때 약 1분 후 깨어남
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build:node && pnpm run db:push
+    buildCommand: npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile --prod=false && pnpm run build:node && pnpm run db:push
     startCommand: pnpm run start:node
     healthCheckPath: /api/healthz
     envVars:
