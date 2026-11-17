@@ -12,7 +12,8 @@
 ```
 
 화면과 API가 같은 주소에서 나오므로 별도 리버스 프록시가 필요 없습니다.
-권장 조합은 **Render(웹 서비스 + PostgreSQL) + Cloudflare R2(이미지)** 입니다.
+무료 권장 조합은 **Render Free(웹 서비스) + Neon Free(PostgreSQL) + Cloudflare R2(이미지)** 입니다.
+Render 무료 DB는 30일 뒤 만료되므로 DB는 Neon에 둡니다.
 Railway, Fly.io 등도 아래 명령을 그대로 쓰면 됩니다.
 
 | 단계 | 명령 |
@@ -31,24 +32,29 @@ Railway, Fly.io 등도 아래 명령을 그대로 쓰면 됩니다.
 | 이름 | 설명 |
 |---|---|
 | `OPENAI_API_KEY` | 서버 전용. 화면 코드에 넣지 않습니다. |
-| `DATABASE_URL` | Render는 render.yaml이 DB에서 자동 연결 |
+| `DATABASE_URL` | Neon의 **Direct connection** 주소(`-pooler`가 없는 것). 실시간 알림(LISTEN/NOTIFY)에 필요 |
 | `STORAGE_DRIVER` | `s3` |
 | `S3_BUCKET` | R2 버킷 이름 (공개 접근 끄기) |
 | `S3_ENDPOINT` | `https://<계정ID>.r2.cloudflarestorage.com` |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | R2 → API 토큰 (해당 버킷 Object Read & Write만) |
 | `S3_REGION` | `auto` (R2) |
+| `S3_PREFIX` | 선택. 기존 R2 버킷을 같이 쓸 때 하위 폴더(예: `elt-analyzer`) |
 
 `VITE_SYNC_ROOM_ID`, `SYNC_SERVER_URL`, `SUPABASE_*`, `PRIVATE_OBJECT_DIR`는 새 환경에서 **설정하지 않습니다**.
 
-## Render 배포 순서
+## 배포 순서 (무료)
 
-1. 이 폴더를 GitHub 비공개 저장소에 올립니다(`.env`는 .gitignore로 제외됨).
-2. Cloudflare → R2 → 버킷 생성 → "R2 API 토큰 관리"에서 해당 버킷 전용 읽기/쓰기 토큰 발급.
-3. Render → New → **Blueprint** → 저장소 선택 → `render.yaml` 인식.
-4. `sync: false`로 표시된 값(OPENAI_API_KEY, S3_*)을 Render 화면에 입력 → 배포.
+1. **Neon**: https://neon.tech 가입 → 프로젝트 생성(지역: AWS Asia Pacific (Singapore)) →
+   Connect 화면에서 **Connection pooling 끄기** 상태의 주소를 복사(`postgresql://...neon.tech/...?sslmode=require`).
+2. **Cloudflare R2**: 버킷 준비(새 버킷 권장, 비공개) → 해당 버킷 전용 Object Read & Write 토큰 발급.
+3. **Render**: GitHub로 로그인 → New → **Blueprint** → 저장소 선택 → `render.yaml` 인식.
+4. `sync: false` 항목(DATABASE_URL, OPENAI_API_KEY, S3_*)을 Render 화면에 입력 → Apply.
+   빌드 중 `db:push`가 Neon에 `elt_sync_rooms` 테이블을 만듭니다(기존 데이터는 지우지 않음).
 5. 발급된 주소(예: `https://elt-analyzer.onrender.com`)에서 `/api/healthz`가 `{"status":"ok"}`인지 확인.
 
-> 무료 플랜은 15분 유휴 후 잠들어 실시간 연결이 끊기고 무료 DB는 기한이 있어, render.yaml은 유료 최소 플랜(starter, basic-256mb)으로 적었습니다.
+무료 플랜 특성: 15분간 접속이 없으면 서버가 잠들고, 다음 접속 때 약 1분 뒤 열립니다.
+자료는 Neon·R2에 있으므로 잠들어도 사라지지 않고, 앱은 깨어나면 자동으로 다시 연결·병합합니다.
+불편하면 Render에서 plan만 starter로 바꾸면 됩니다.
 
 ## 기존 자료 이전 (기존 Replit 앱은 끄지 않은 채 진행)
 
@@ -92,6 +98,6 @@ API_PROXY_TARGET=http://localhost:8080 PORT=3000 BASE_PATH=/ pnpm --filter @work
 - `artifacts/api-server/src/app.ts`: 빌드된 화면 제공 + SPA 경로 처리(`/api` 제외).
 - `artifacts/elt-analyzer/vite.config.ts`: `API_PROXY_TARGET`이 있을 때만 개발용 `/api` 프록시.
 - 문구: "Replit Secrets"/"Replit 저장소" → "호스팅 환경의 비밀값(Secrets)"/"서버 저장소".
-- 추가: `render.yaml`, `.env.example`(이름만), `DEPLOY.md`, 루트 스크립트 `build:node`/`start:node`/`db:push`, 의존성 `aws4fetch`.
+- 추가: `render.yaml`(무료 구성: Render Free + Neon + R2), `.env.example`(이름만), `DEPLOY.md`, 루트 스크립트 `build:node`/`start:node`/`db:push`, 의존성 `aws4fetch`.
 - 그대로 둔 것: Supabase·파일 저장 구형 경로(`sync.ts`), Vercel 핸들러(`api/`, `vercel.json`).
   `api/lib/sync-proxy.ts`의 기본 주소는 여전히 기존 Replit이므로 **새 환경을 Vercel로 배포하지 마세요**.
