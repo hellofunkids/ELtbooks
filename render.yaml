@@ -1,0 +1,41 @@
+# Render Blueprint — 단일 Node 서비스(화면 + /api + SSE) + 관리형 PostgreSQL.
+# 비밀값은 여기에 쓰지 않습니다. sync: false 항목은 Render 대시보드에서 직접 입력합니다.
+# Railway·Fly.io 등에서도 같은 빌드/시작 명령을 쓰면 됩니다(DEPLOY.md 참고).
+services:
+  - type: web
+    name: elt-analyzer
+    runtime: node
+    region: singapore
+    plan: starter            # free 플랜은 유휴 시 잠들어 SSE 실시간 연결이 끊깁니다.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build:node && pnpm run db:push
+    startCommand: pnpm run start:node
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: elt-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        value: auto
+
+databases:
+  - name: elt-db
+    region: singapore
+    plan: basic-256mb
+    databaseName: elt

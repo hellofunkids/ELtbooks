@@ -1,0 +1,336 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: ELT 교재 설명 AI API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: analyze
+    description: ELT textbook image analysis
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /analyze:
+    post:
+      operationId: analyzeImage
+      tags: [analyze]
+      summary: Analyze an ELT textbook image or pasted passage
+      description: Extracts the main passage from an image, excluding page furniture, or reads pasted English text; returns the same structured Korean lesson content for both inputs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeInput"
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: OpenAI API key not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /grammar-worksheet:
+    post:
+      operationId: generateGrammarWorksheet
+      tags: [analyze]
+      summary: Generate complete grammar cards from a passage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrammarWorksheetInput"
+      responses:
+        "200":
+          description: Complete grammar cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrammarWorksheetData"
+        "400":
+          description: Invalid passage
+        "502":
+          description: Generation failed or incomplete
+        "503":
+          description: AI service unavailable
+  /sync/room/{roomId}:
+    parameters:
+      - in: path
+        name: roomId
+        required: true
+        schema:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{6,64}$"
+    get:
+      operationId: getSyncRoom
+      summary: Read the persistent shared room
+      responses:
+        "200":
+          description: Current room snapshot and revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncSnapshot"
+    put:
+      operationId: updateSyncRoom
+      summary: Atomically merge local changes without deleting omitted items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncPayload"
+      responses:
+        "200":
+          description: Committed merged snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncSnapshot"
+        "503":
+          description: Storage unavailable; client retains unsent changes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /sync/events/{roomId}:
+    get:
+      operationId: streamSyncEvents
+      summary: SSE room revision notifications; reconnect rehydrates the client
+      parameters:
+        - in: path
+          name: roomId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "ready/change events carry a revision; unavailable events carry an error"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+components:
+  schemas:
+    SyncRecord:
+      type: object
+      additionalProperties: {}
+    SyncPayload:
+      type: object
+      properties:
+        library:
+          type: array
+          items:
+            type: object
+            required: [id]
+            properties:
+              id:
+                type: string
+            additionalProperties: true
+        quizzes:
+          $ref: "#/components/schemas/SyncRecord"
+        quizzesV3:
+          $ref: "#/components/schemas/SyncRecord"
+        essaysV3:
+          $ref: "#/components/schemas/SyncRecord"
+        updated:
+          $ref: "#/components/schemas/SyncRecord"
+        deleted:
+          $ref: "#/components/schemas/SyncRecord"
+    SyncSnapshot:
+      type: object
+      required: [data, revision, storage]
+      properties:
+        data:
+          $ref: "#/components/schemas/SyncPayload"
+        revision:
+          type: integer
+        storage:
+          type: string
+          enum: [replit]
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    AnalyzeInput:
+      type: object
+      description: Supply either pasted English text or both imageBase64 and mimeType, but not both input modes.
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: Pasted English reading passage; page furniture is excluded before analysis.
+        imageBase64:
+          type: string
+          description: Base64-encoded image data
+        mimeType:
+          type: string
+          description: MIME type of the image (e.g. image/jpeg, image/png)
+    GrammarExample:
+      type: object
+      required:
+        - sentence
+        - translation
+      properties:
+        sentence:
+          type: string
+          description: Example English sentence using the same grammar pattern
+        translation:
+          type: string
+          description: Korean translation of the example sentence
+    LessonSegment:
+      type: object
+      required:
+        - phrase
+        - explanation
+      properties:
+        phrase:
+          type: string
+          description: Exact English phrase from the original text to highlight
+        explanation:
+          type: string
+          description: Korean spoken explanation for this phrase (2-3 sentences)
+        grammarNote:
+          type: string
+          description: Optional grammar coaching tip for this phrase (teacher-style, spoken Korean)
+        grammarUsage:
+          type: string
+          description: Optional grammar pattern explanation (when/how to use this grammar structure)
+        grammarExamples:
+          type: array
+          description: Optional list of additional example sentences demonstrating the same grammar
+          items:
+            $ref: "#/components/schemas/GrammarExample"
+    GrammarWorksheetInput:
+      type: object
+      required: [originalText]
+      properties:
+        originalText:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        grammarSummary:
+          type: string
+          maxLength: 20000
+    GrammarCard:
+      type: object
+      required: [phrase, explanation, grammarNote, grammarUsage, grammarExamples]
+      properties:
+        phrase:
+          type: string
+          minLength: 1
+        explanation:
+          type: string
+        grammarNote:
+          type: string
+          minLength: 1
+        grammarUsage:
+          type: string
+          minLength: 1
+        grammarExamples:
+          type: array
+          minItems: 2
+          items:
+            $ref: "#/components/schemas/GrammarExample"
+    GrammarWorksheetData:
+      type: object
+      required: [cards]
+      properties:
+        cards:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/GrammarCard"
+    AnalysisResult:
+      type: object
+      required:
+        - topic
+        - translation
+        - context
+        - vocabulary
+        - grammar
+        - teacherScript
+        - studentQuestions
+        - answerExamples
+        - summary
+        - originalText
+        - lessonSegments
+      properties:
+        grammarWorksheetCards:
+          type: array
+          items:
+            $ref: "#/components/schemas/GrammarCard"
+        topic:
+          type: string
+          description: 오늘의 핵심 주제
+        translation:
+          type: string
+          description: 본문 쉬운 해석
+        context:
+          type: string
+          description: 문맥 설명
+        vocabulary:
+          type: string
+          description: 핵심 단어
+        grammar:
+          type: string
+          description: 문법 포인트
+        teacherScript:
+          type: string
+          description: 선생님 설명 스크립트
+        studentQuestions:
+          type: string
+          description: 학생 질문
+        answerExamples:
+          type: string
+          description: 정답 예시
+        summary:
+          type: string
+          description: 수업 마무리 요약
+        originalText:
+          type: string
+          description: Full English text extracted verbatim from the image
+        lessonSegments:
+          type: array
+          description: Ordered list of text segments with Korean explanations for lesson mode
+          items:
+            $ref: "#/components/schemas/LessonSegment"
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
